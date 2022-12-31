@@ -18,8 +18,8 @@ package main
 
 import (
 	"flag"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -87,13 +87,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PodReconciler{
+	labelSelector := v1.LabelSelector{
+		MatchLabels: map[string]string{"heimdall": "watching"},
+	}
+
+	if err = (&controllers.PodController{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).Add(mgr, labelSelector); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
 	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

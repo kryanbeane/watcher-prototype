@@ -1,61 +1,71 @@
-/*
-Copyright 2022.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controllers
 
 import (
 	"context"
-
-	corev1 "k8s.io/api/core/v1"
+	"github.com/sirupsen/logrus"
+	v12 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// PodReconciler reconciles a Pod object
-type PodReconciler struct {
+type PodController struct {
 	client.Client
-	Scheme *runtime.Scheme
+	*runtime.Scheme
+	dynamic.Interface
+}
+
+const (
+	serviceAccountNamePrefix = "heimdall-service-account"
+	bindingName              = "heimdall-binding"
+)
+
+var _ reconcile.Reconciler = &PodController{}
+
+// Add +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch
+func (p PodController) Add(mgr manager.Manager, selector v1.LabelSelector) error {
+	// Create a new Controller
+	c, err := controller.New("pod-controller", mgr,
+		controller.Options{Reconciler: &PodController{
+			Client:    mgr.GetClient(),
+			Scheme:    mgr.GetScheme(),
+			Interface: dynamic.NewForConfigOrDie(mgr.GetConfig()),
+		}})
+	if err != nil {
+		logrus.Errorf("Failed to create pod controller: %v", err)
+		return err
+	}
+
+	// Create label selector containing the specified label
+	labelSelectorPredicate, err := predicate.LabelSelectorPredicate(selector)
+	if err != nil {
+		logrus.Errorf("Error creating label selector predicate: %v", err)
+		return err
+	}
+
+	// Add a watch to objects containing that label
+	err = c.Watch(
+		&source.Kind{Type: &v12.Pod{}}, &handler.EnqueueRequestForObject{}, labelSelectorPredicate)
+	if err != nil {
+		logrus.Errorf("Error creating watch for objects: %v", err)
+		return err
+	}
+	return nil
 }
 
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core,resources=pods/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Pod object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
-func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+func (p PodController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	logrus.Infof("Reconciling pod %s", request.NamespacedName)
 
-	// TODO(user): your logic here
-
-	return ctrl.Result{}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
-		Complete(r)
+	return reconcile.Result{}, nil
 }

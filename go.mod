@@ -5,6 +5,8 @@ go 1.19
 require (
 	github.com/onsi/ginkgo/v2 v2.1.4
 	github.com/onsi/gomega v1.19.0
+	github.com/openshift/api v3.9.0+incompatible
+	github.com/sirupsen/logrus v1.8.1
 	k8s.io/api v0.25.0
 	k8s.io/apimachinery v0.25.0
 	k8s.io/client-go v0.25.0
